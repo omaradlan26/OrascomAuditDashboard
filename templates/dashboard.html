@@ -1,0 +1,301 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Orascom Audit Dashboard</title>
+    <link rel="stylesheet" href="{{ url_for('styles', filename='styles.css') }}">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <div class="page-shell">
+        <aside class="sidebar">
+            <div>
+                <h2>Filters & Quick Stats</h2>
+                <form method="get" class="stack-form">
+                    <label for="assignment">Assignment</label>
+                    <select id="assignment" name="assignment" onchange="this.form.submit()">
+                        {% if assignments %}
+                            {% for assignment in assignments %}
+                                <option value="{{ assignment }}" {% if assignment == current_assignment %}selected{% endif %}>{{ assignment }}</option>
+                            {% endfor %}
+                        {% else %}
+                            <option value="">No assignments available</option>
+                        {% endif %}
+                    </select>
+
+                    <fieldset>
+                        <legend>Rating</legend>
+                        {% for rating in ["High", "Medium", "Low"] %}
+                            <label class="checkbox-row">
+                                <input type="checkbox" name="rating" value="{{ rating }}" {% if rating in selected_ratings %}checked{% endif %}>
+                                <span>{{ rating }}</span>
+                            </label>
+                        {% endfor %}
+                    </fieldset>
+
+                    <fieldset>
+                        <legend>Action Owner</legend>
+                        {% if owner_options %}
+                            {% for owner in owner_options %}
+                                <label class="checkbox-row">
+                                    <input type="checkbox" name="owner" value="{{ owner }}" {% if owner in selected_owners %}checked{% endif %}>
+                                    <span>{{ owner }}</span>
+                                </label>
+                            {% endfor %}
+                        {% else %}
+                            <p class="empty-copy">No owners available for this assignment.</p>
+                        {% endif %}
+                    </fieldset>
+
+                    <div class="date-grid">
+                        <div>
+                            <label for="due_start">Due Start</label>
+                            <input id="due_start" type="date" name="due_start" value="{{ due_start }}">
+                        </div>
+                        <div>
+                            <label for="due_end">Due End</label>
+                            <input id="due_end" type="date" name="due_end" value="{{ due_end }}">
+                        </div>
+                    </div>
+
+                    <button type="submit" class="secondary-button">Apply Filters</button>
+                </form>
+            </div>
+
+            <div class="sidebar-stats">
+                <p><strong>Assignments:</strong> {{ assignments|length }}</p>
+                <p><strong>Total observations:</strong> {{ total_observations }}</p>
+                <p><strong>Overdue actions:</strong> {{ overdue_count }}</p>
+                <p><strong>High priority:</strong> {{ high_priority_count }}</p>
+            </div>
+        </aside>
+
+        <main class="content">
+            <section class="hero-card">
+                <div>
+                    <div class="hero-tag">Orascom Construction Audit Workspace</div>
+                    <h1>Orascom Audit Dashboard</h1>
+                    <p class="hero-copy">A production-ready Flask dashboard for auditors and managers to track site observations, action ownership, deadlines, and risk severity across every assignment.</p>
+                    <p class="hero-note">Current assignment: <strong>{{ current_assignment or "None" }}</strong> | Portfolio observations: <strong>{{ total_observations }}</strong></p>
+                    <p class="hero-note">Storage backend: <strong>{{ storage.label }}</strong>{% if storage.read_only %} | <strong>Read-only mode</strong>{% endif %}</p>
+                </div>
+                {% if logo_exists %}
+                    <img src="{{ url_for('assets', filename='orascom-logo.png') }}" alt="Orascom logo" class="hero-logo">
+                {% endif %}
+            </section>
+
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                    <section class="flash-stack">
+                        {% for category, message in messages %}
+                            <div class="flash-message flash-{{ category }}">{{ message }}</div>
+                        {% endfor %}
+                    </section>
+                {% endif %}
+            {% endwith %}
+
+            {% if storage.read_only %}
+                <section class="readonly-banner">
+                    This Vercel deployment is using read-only data. Configure persistent storage before enabling create or delete actions in production.
+                </section>
+            {% endif %}
+
+            <section class="metrics-grid">
+                {% for label, value in metrics.items() %}
+                    <article class="metric-card">
+                        <div class="metric-label">{{ label }}</div>
+                        <div class="metric-value">{{ value }}</div>
+                    </article>
+                {% endfor %}
+            </section>
+
+            <section class="management-grid">
+                <article class="panel-card">
+                    <div class="section-kicker">Manage Assignments</div>
+                    <h2>Assignment Controls</h2>
+
+                    <form method="post" action="{{ url_for('create_assignment') }}" class="stack-form">
+                        <input type="hidden" name="selected_assignment" value="{{ current_assignment or '' }}">
+                        <label for="new_assignment">New Assignment</label>
+                        <input id="new_assignment" type="text" name="new_assignment" placeholder="Example: Cairo Tower Phase 2" {% if storage.read_only %}disabled{% endif %}>
+                        <button type="submit" {% if storage.read_only %}disabled{% endif %}>Add Assignment</button>
+                    </form>
+
+                    <form method="post" action="{{ url_for('delete_assignment') }}" class="stack-form">
+                        <input type="hidden" name="selected_assignment" value="{{ current_assignment or '' }}">
+                        <label for="assignment_to_delete">Delete Assignment</label>
+                        <select id="assignment_to_delete" name="assignment_to_delete" {% if not assignments or storage.read_only %}disabled{% endif %}>
+                            {% for assignment in assignments %}
+                                <option value="{{ assignment }}" {% if assignment == current_assignment %}selected{% endif %}>{{ assignment }}</option>
+                            {% endfor %}
+                        </select>
+                        <button type="submit" class="danger-button" {% if not assignments or storage.read_only %}disabled{% endif %}>Delete Assignment</button>
+                    </form>
+                </article>
+
+                <article class="panel-card">
+                    <div class="section-kicker">Observation Intake</div>
+                    <h2>Add Audit Observation</h2>
+                    <p class="muted-copy">
+                        {% if current_assignment %}
+                            Enter a new audit finding for {{ current_assignment }}.
+                        {% else %}
+                            Create an assignment first to start recording observations.
+                        {% endif %}
+                    </p>
+
+                    <form method="post" action="{{ url_for('create_observation') }}" class="stack-form">
+                        <input type="hidden" name="assignment" value="{{ current_assignment or '' }}">
+                        <label for="observation">Observation</label>
+                        <textarea id="observation" name="observation" rows="4" placeholder="Describe the observed issue." {% if not current_assignment or storage.read_only %}disabled{% endif %}></textarea>
+
+                        <label for="rating">Rating</label>
+                        <select id="rating" name="rating" {% if not current_assignment or storage.read_only %}disabled{% endif %}>
+                            {% for rating in ["High", "Medium", "Low"] %}
+                                <option value="{{ rating }}">{{ rating }}</option>
+                            {% endfor %}
+                        </select>
+
+                        <label for="agreed_action">Agreed Action</label>
+                        <textarea id="agreed_action" name="agreed_action" rows="4" placeholder="Describe the corrective action." {% if not current_assignment or storage.read_only %}disabled{% endif %}></textarea>
+
+                        <div class="date-grid">
+                            <div>
+                                <label for="action_owner">Action Owner</label>
+                                <input id="action_owner" type="text" name="action_owner" placeholder="Safety Officer" {% if not current_assignment or storage.read_only %}disabled{% endif %}>
+                            </div>
+                            <div>
+                                <label for="due_date">Due Date</label>
+                                <input id="due_date" type="date" name="due_date" value="{{ today }}" {% if not current_assignment or storage.read_only %}disabled{% endif %}>
+                            </div>
+                        </div>
+
+                        <button type="submit" {% if not current_assignment or storage.read_only %}disabled{% endif %}>Submit Observation</button>
+                    </form>
+                </article>
+            </section>
+
+            <section class="panel-card">
+                <div class="section-kicker">Assignment Dashboard</div>
+                <div class="section-head">
+                    <div>
+                        <h2>Observations{% if current_assignment %} for {{ current_assignment }}{% endif %}</h2>
+                        <p class="muted-copy">Filter-aware view with persistent routes, server-rendered tables, and deploy-safe operations.</p>
+                    </div>
+
+                    <form method="post" action="{{ url_for('delete_observation') }}" class="delete-form">
+                        <input type="hidden" name="assignment" value="{{ current_assignment or '' }}">
+                        <label for="observation_id">Delete Observation</label>
+                        <select id="observation_id" name="observation_id" {% if not current_observations or storage.read_only %}disabled{% endif %}>
+                            {% for item in current_observations %}
+                                <option value="{{ item.id }}">{{ item.id }}. {{ item.observation }}</option>
+                            {% endfor %}
+                        </select>
+                        <button type="submit" class="danger-button" {% if not current_observations or storage.read_only %}disabled{% endif %}>Delete</button>
+                    </form>
+                </div>
+
+                {% if filtered_observations %}
+                    <div class="table-wrapper">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>No.</th>
+                                    <th>Observation</th>
+                                    <th>Rating</th>
+                                    <th>Agreed Action</th>
+                                    <th>Owner</th>
+                                    <th>Due Date</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for item in filtered_observations %}
+                                    <tr>
+                                        <td>{{ loop.index }}</td>
+                                        <td>{{ item.observation }}</td>
+                                        <td><span class="rating-pill rating-{{ item.rating|lower }}">{{ item.rating }}</span></td>
+                                        <td>{{ item.agreed_action }}</td>
+                                        <td>{{ item.action_owner }}</td>
+                                        <td>{{ item.due_date }}</td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <div class="charts-grid">
+                        <article class="chart-card">
+                            <h3>Severity Distribution</h3>
+                            <canvas id="severityChart"></canvas>
+                        </article>
+                        <article class="chart-card">
+                            <h3>Actions by Owner</h3>
+                            <canvas id="ownerChart"></canvas>
+                        </article>
+                    </div>
+                {% else %}
+                    <div class="empty-state">No observations match the selected filters. Try adjusting the filters or add a new observation.</div>
+                {% endif %}
+            </section>
+        </main>
+    </div>
+
+    <script>
+        const severityData = {{ severity_chart_data | tojson }};
+        const ownerData = {{ owner_chart_data | tojson }};
+
+        if (severityData.some(item => item.value > 0)) {
+            new Chart(document.getElementById("severityChart"), {
+                type: "doughnut",
+                data: {
+                    labels: severityData.map(item => item.label),
+                    datasets: [{
+                        data: severityData.map(item => item.value),
+                        backgroundColor: severityData.map(item => item.color),
+                        borderWidth: 0
+                    }]
+                },
+                options: {
+                    plugins: {
+                        legend: {
+                            position: "bottom"
+                        }
+                    }
+                }
+            });
+        }
+
+        if (ownerData.length > 0) {
+            new Chart(document.getElementById("ownerChart"), {
+                type: "bar",
+                data: {
+                    labels: ownerData.map(item => item.label),
+                    datasets: [{
+                        label: "Actions Due",
+                        data: ownerData.map(item => item.value),
+                        backgroundColor: "#0066CC",
+                        borderRadius: 8
+                    }]
+                },
+                options: {
+                    indexAxis: "y",
+                    plugins: {
+                        legend: {
+                            display: false
+                        }
+                    },
+                    scales: {
+                        x: {
+                            beginAtZero: true,
+                            ticks: {
+                                precision: 0
+                            }
+                        }
+                    }
+                }
+            });
+        }
+    </script>
+</body>
+</html>
