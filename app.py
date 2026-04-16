@@ -71,6 +71,13 @@ def create_app() -> Flask:
             due_start=due_start,
             due_end=due_end,
         )
+        edit_observation_id = request.args.get("edit")
+        edit_record = None
+        if edit_observation_id and current_assignment:
+            edit_record = next(
+                (item for item in current_observations if str(item.get("id")) == edit_observation_id),
+                None,
+            )
 
         total_observations = sum(len(items) for items in data.values())
         overdue_count = sum(
@@ -107,6 +114,7 @@ def create_app() -> Flask:
                 {"label": owner, "value": count}
                 for owner, count in sorted(owner_counts.items(), key=lambda item: item[1], reverse=True)
             ],
+            edit_record=edit_record,
             storage=storage,
             logo_exists=LOGO_PATH.exists(),
             today=date.today().isoformat(),
@@ -215,6 +223,46 @@ def create_app() -> Flask:
             data[current_assignment] = renumber_observations(updated_observations)
             save_data(data)
             flash("Observation deleted successfully.", "success")
+        return redirect(url_for("dashboard", assignment=current_assignment))
+
+    @app.post("/observations/update")
+    def update_observation():
+        data = load_or_seed_data()
+        storage = get_storage_status()
+        current_assignment = request.form.get("assignment", "")
+        if storage["read_only"]:
+            flash("This deployment is running in read-only mode. Configure persistent storage to update observations.", "error")
+            return redirect(url_for("dashboard", assignment=current_assignment))
+
+        observation_id = request.form.get("observation_id", "")
+        observations = data.get(current_assignment, [])
+        record = next((item for item in observations if str(item.get("id")) == observation_id), None)
+        if record is None:
+            flash("The selected observation could not be found.", "warning")
+            return redirect(url_for("dashboard", assignment=current_assignment))
+
+        observation = request.form.get("observation", "").strip()
+        agreed_action = request.form.get("agreed_action", "").strip()
+        action_owner = request.form.get("action_owner", "").strip()
+        rating = request.form.get("rating", "Low")
+        due_date = request.form.get("due_date", "")
+
+        if not all([observation, agreed_action, action_owner, due_date]):
+            flash("Please complete all required fields before saving changes.", "error")
+            return redirect(url_for("dashboard", assignment=current_assignment, edit=observation_id))
+
+        record.update(
+            {
+                "observation": observation,
+                "rating": rating if rating in RATINGS else "Low",
+                "agreed_action": agreed_action,
+                "action_owner": action_owner,
+                "due_date": due_date,
+            }
+        )
+        data[current_assignment] = renumber_observations(observations)
+        save_data(data)
+        flash("Observation updated successfully.", "success")
         return redirect(url_for("dashboard", assignment=current_assignment))
 
     return app

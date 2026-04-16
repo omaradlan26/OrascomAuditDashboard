@@ -136,42 +136,52 @@
 
                 <article class="panel-card">
                     <div class="section-kicker">Observation Intake</div>
-                    <h2>Add Audit Observation</h2>
+                    <h2>{% if edit_record %}Edit Audit Observation{% else %}Add Audit Observation{% endif %}</h2>
                     <p class="muted-copy">
                         {% if current_assignment %}
-                            Enter a new audit finding for {{ current_assignment }}.
+                            {% if edit_record %}
+                                Update the selected audit finding for {{ current_assignment }}.
+                            {% else %}
+                                Enter a new audit finding for {{ current_assignment }}.
+                            {% endif %}
                         {% else %}
                             Create an assignment first to start recording observations.
                         {% endif %}
                     </p>
 
-                    <form method="post" action="{{ url_for('create_observation') }}" class="stack-form">
+                    <form method="post" action="{% if edit_record %}{{ url_for('update_observation') }}{% else %}{{ url_for('create_observation') }}{% endif %}" class="stack-form">
                         <input type="hidden" name="assignment" value="{{ current_assignment or '' }}">
+                        {% if edit_record %}
+                            <input type="hidden" name="observation_id" value="{{ edit_record.id }}">
+                        {% endif %}
                         <label for="observation">Observation</label>
-                        <textarea id="observation" name="observation" rows="4" placeholder="Describe the observed issue." {% if not current_assignment or storage.read_only %}disabled{% endif %}></textarea>
+                        <textarea id="observation" name="observation" rows="4" placeholder="Describe the observed issue." {% if not current_assignment or storage.read_only %}disabled{% endif %}>{{ edit_record.observation if edit_record else '' }}</textarea>
 
                         <label for="rating">Rating</label>
                         <select id="rating" name="rating" {% if not current_assignment or storage.read_only %}disabled{% endif %}>
                             {% for rating in ["High", "Medium", "Low"] %}
-                                <option value="{{ rating }}">{{ rating }}</option>
+                                <option value="{{ rating }}" {% if edit_record and edit_record.rating == rating %}selected{% endif %}>{{ rating }}</option>
                             {% endfor %}
                         </select>
 
                         <label for="agreed_action">Agreed Action</label>
-                        <textarea id="agreed_action" name="agreed_action" rows="4" placeholder="Describe the corrective action." {% if not current_assignment or storage.read_only %}disabled{% endif %}></textarea>
+                        <textarea id="agreed_action" name="agreed_action" rows="4" placeholder="Describe the corrective action." {% if not current_assignment or storage.read_only %}disabled{% endif %}>{{ edit_record.agreed_action if edit_record else '' }}</textarea>
 
                         <div class="date-grid">
                             <div>
                                 <label for="action_owner">Action Owner</label>
-                                <input id="action_owner" type="text" name="action_owner" placeholder="Safety Officer" {% if not current_assignment or storage.read_only %}disabled{% endif %}>
+                                <input id="action_owner" type="text" name="action_owner" placeholder="Safety Officer" value="{{ edit_record.action_owner if edit_record else '' }}" {% if not current_assignment or storage.read_only %}disabled{% endif %}>
                             </div>
                             <div>
                                 <label for="due_date">Due Date</label>
-                                <input id="due_date" type="date" name="due_date" value="{{ today }}" {% if not current_assignment or storage.read_only %}disabled{% endif %}>
+                                <input id="due_date" type="date" name="due_date" value="{{ edit_record.due_date if edit_record else today }}" {% if not current_assignment or storage.read_only %}disabled{% endif %}>
                             </div>
                         </div>
 
-                        <button type="submit" {% if not current_assignment or storage.read_only %}disabled{% endif %}>Submit Observation</button>
+                        <button type="submit" {% if not current_assignment or storage.read_only %}disabled{% endif %}>{% if edit_record %}Save Changes{% else %}Submit Observation{% endif %}</button>
+                        {% if edit_record %}
+                            <a href="{{ url_for('dashboard', assignment=current_assignment) }}" class="link-button">Cancel Edit</a>
+                        {% endif %}
                     </form>
                 </article>
             </section>
@@ -207,6 +217,7 @@
                                     <th>Agreed Action</th>
                                     <th>Owner</th>
                                     <th>Due Date</th>
+                                    <th>Actions</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -218,6 +229,9 @@
                                         <td>{{ item.agreed_action }}</td>
                                         <td>{{ item.action_owner }}</td>
                                         <td>{{ item.due_date }}</td>
+                                        <td class="table-action-cell">
+                                            <a href="{{ url_for('dashboard', assignment=current_assignment, edit=item.id) }}" class="table-link">Edit</a>
+                                        </td>
                                     </tr>
                                 {% endfor %}
                             </tbody>

@@ -229,6 +229,19 @@ textarea:disabled {
     background: var(--orascom-blue);
 }
 
+.link-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    text-decoration: none;
+    background: white;
+    color: var(--orascom-blue-dark);
+    border: 1px solid var(--orascom-border);
+    border-radius: 12px;
+    padding: 0.8rem 0.9rem;
+    font-weight: 700;
+}
+
 .danger-button {
     background: var(--orascom-red);
 }
@@ -309,6 +322,21 @@ thead th {
 .rating-low {
     background: var(--orascom-teal);
     color: white;
+}
+
+.table-action-cell {
+    white-space: nowrap;
+}
+
+.table-link {
+    color: var(--orascom-blue);
+    font-weight: 700;
+    text-decoration: none;
+}
+
+.table-link:hover,
+.link-button:hover {
+    filter: brightness(0.98);
 }
 
 .flash-message {

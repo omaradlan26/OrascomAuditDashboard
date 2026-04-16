@@ -48,11 +48,24 @@ flask run
 
 ### Environment variables
 
-- `OBSERVATIONS_DATA_JSON`
-  Use this to ship a fixed JSON snapshot with the deployment. When this variable is set, the app runs in read-only mode.
+- `KV_REST_API_URL`
+  Added automatically when you connect Vercel KV to the project.
+- `KV_REST_API_TOKEN`
+  Added automatically when you connect Vercel KV to the project.
+- `OBSERVATIONS_KV_KEY`
+  Optional Redis key override. Defaults to `orascom_audit_dashboard:observations`.
 - `OBSERVATIONS_DATA_FILE`
   Local-development override for the JSON file path.
+- `OBSERVATIONS_DATA_JSON`
+  Optional read-only fallback snapshot for environments where you want a fixed dataset.
 
 ### Production note
 
-Vercel serverless functions do not provide durable filesystem writes. This app now protects production deployments by switching to read-only mode on Vercel unless you attach a real persistent backend and extend `utils/data_handler.py` to use it.
+Vercel serverless functions do not provide durable filesystem writes. This app now enables full CRUD in production when `KV_REST_API_URL` and `KV_REST_API_TOKEN` are configured. Without KV, the deployment stays read-only by design.
+
+### Enable CRUD on Vercel
+
+1. Open the project in Vercel.
+2. Go to `Storage`.
+3. Create or connect a `KV` database.
+4. Redeploy the project so `KV_REST_API_URL` and `KV_REST_API_TOKEN` are available at runtime.
