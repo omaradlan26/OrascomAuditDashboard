@@ -45,8 +45,7 @@ def create_app() -> Flask:
 
     @app.get("/")
     def dashboard():
-        data = load_or_seed_data()
-        storage = get_storage_status()
+        data, storage = load_or_seed_data()
         assignments = get_assignment_names(data)
         selected_assignment = request.args.get("assignment") or (assignments[0] if assignments else None)
         if selected_assignment not in assignments:
@@ -124,8 +123,7 @@ def create_app() -> Flask:
 
     @app.post("/assignments")
     def create_assignment():
-        data = load_or_seed_data()
-        storage = get_storage_status()
+        data, storage = load_or_seed_data()
         selected_assignment = request.form.get("selected_assignment", "")
         if storage["read_only"]:
             flash("This deployment is running in read-only mode. Configure persistent storage to add assignments.", "error")
@@ -141,16 +139,15 @@ def create_app() -> Flask:
             flash("That assignment already exists.", "warning")
         else:
             data[normalized_name] = []
-            save_data(data)
-            flash(f"Assignment '{normalized_name}' created successfully.", "success")
-            selected_assignment = normalized_name
+            if persist_data(data):
+                flash(f"Assignment '{normalized_name}' created successfully.", "success")
+                selected_assignment = normalized_name
 
         return redirect(url_for("dashboard", assignment=selected_assignment))
 
     @app.post("/assignments/delete")
     def delete_assignment():
-        data = load_or_seed_data()
-        storage = get_storage_status()
+        data, storage = load_or_seed_data()
         selected_assignment = request.form.get("selected_assignment", "")
         if storage["read_only"]:
             flash("This deployment is running in read-only mode. Configure persistent storage to delete assignments.", "error")
@@ -159,10 +156,10 @@ def create_app() -> Flask:
         assignment_to_delete = request.form.get("assignment_to_delete", "")
         if assignment_to_delete in data:
             data.pop(assignment_to_delete, None)
-            save_data(data)
-            flash(f"Assignment '{assignment_to_delete}' deleted successfully.", "success")
-            remaining_assignments = get_assignment_names(data)
-            selected_assignment = remaining_assignments[0] if remaining_assignments else ""
+            if persist_data(data):
+                flash(f"Assignment '{assignment_to_delete}' deleted successfully.", "success")
+                remaining_assignments = get_assignment_names(data)
+                selected_assignment = remaining_assignments[0] if remaining_assignments else ""
         else:
             flash("The selected assignment could not be found.", "warning")
 
@@ -170,8 +167,7 @@ def create_app() -> Flask:
 
     @app.post("/observations")
     def create_observation():
-        data = load_or_seed_data()
-        storage = get_storage_status()
+        data, storage = load_or_seed_data()
         current_assignment = request.form.get("assignment", "")
         if storage["read_only"]:
             flash("This deployment is running in read-only mode. Configure persistent storage to add observations.", "error")
@@ -203,14 +199,13 @@ def create_app() -> Flask:
             }
         )
         data[current_assignment] = renumber_observations(current_observations)
-        save_data(data)
-        flash("Observation added successfully.", "success")
+        if persist_data(data):
+            flash("Observation added successfully.", "success")
         return redirect(url_for("dashboard", assignment=current_assignment))
 
     @app.post("/observations/delete")
     def delete_observation():
-        data = load_or_seed_data()
-        storage = get_storage_status()
+        data, storage = load_or_seed_data()
         current_assignment = request.form.get("assignment", "")
         if storage["read_only"]:
             flash("This deployment is running in read-only mode. Configure persistent storage to delete observations.", "error")
@@ -223,14 +218,13 @@ def create_app() -> Flask:
             flash("The selected observation could not be found.", "warning")
         else:
             data[current_assignment] = renumber_observations(updated_observations)
-            save_data(data)
-            flash("Observation deleted successfully.", "success")
+            if persist_data(data):
+                flash("Observation deleted successfully.", "success")
         return redirect(url_for("dashboard", assignment=current_assignment))
 
     @app.post("/observations/update")
     def update_observation():
-        data = load_or_seed_data()
-        storage = get_storage_status()
+        data, storage = load_or_seed_data()
         current_assignment = request.form.get("assignment", "")
         if storage["read_only"]:
             flash("This deployment is running in read-only mode. Configure persistent storage to update observations.", "error")
@@ -263,26 +257,35 @@ def create_app() -> Flask:
             }
         )
         data[current_assignment] = renumber_observations(observations)
-        save_data(data)
-        flash("Observation updated successfully.", "success")
+        if persist_data(data):
+            flash("Observation updated successfully.", "success")
         return redirect(url_for("dashboard", assignment=current_assignment))
 
     return app
 
 
-def load_or_seed_data() -> dict[str, list[dict[str, str | int]]]:
+def load_or_seed_data() -> tuple[dict[str, list[dict[str, str | int]]], dict[str, str | bool]]:
+    storage = get_storage_status()
     data = load_data()
     storage = get_storage_status()
     if data:
-        return data
+        return data, storage
     if storage["read_only"]:
         seed_data = load_seed_data()
-        return seed_data or build_default_data()
+        return seed_data or build_default_data(), storage
 
     seed_data = load_seed_data()
     initial_data = seed_data or build_default_data()
-    save_data(initial_data)
-    return initial_data
+    try:
+        save_data(initial_data)
+    except RuntimeError:
+        # If the remote store is temporarily unavailable, keep the app responsive.
+        fallback_storage = dict(storage)
+        fallback_storage["read_only"] = True
+        fallback_storage["label"] = "Unavailable persistent storage"
+        fallback_storage["detail"] = "Persistent storage could not be reached at runtime."
+        return initial_data, fallback_storage
+    return initial_data, storage
 
 
 def build_default_data() -> dict[str, list[dict[str, str | int]]]:
@@ -359,6 +362,15 @@ def rating_color(value: str) -> str:
 def getenv_str(name: str, default: str) -> str:
     value = os.getenv(name)
     return value if value else default
+
+
+def persist_data(data: dict[str, list[dict[str, str | int]]]) -> bool:
+    try:
+        save_data(data)
+    except RuntimeError:
+        flash("Persistent storage is currently unavailable. Please try again after checking the Vercel KV connection.", "error")
+        return False
+    return True
 
 
 app = create_app()
