@@ -73,7 +73,7 @@ def create_app() -> Flask:
         )
         edit_observation_id = request.args.get("edit")
         edit_record = None
-        if edit_observation_id and current_assignment:
+        if edit_observation_id and selected_assignment:
             edit_record = next(
                 (item for item in current_observations if str(item.get("id")) == edit_observation_id),
                 None,
