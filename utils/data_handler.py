@@ -89,6 +89,20 @@ def load_data() -> dict[str, list[dict[str, Any]]]:
     return data if isinstance(data, dict) else {}
 
 
+def load_seed_data() -> dict[str, list[dict[str, Any]]]:
+    data_file = DEFAULT_DATA_FILE
+    if not data_file.exists():
+        return {}
+
+    try:
+        with data_file.open("r", encoding="utf-8") as file:
+            data = json.load(file)
+    except (json.JSONDecodeError, OSError):
+        return {}
+
+    return data if isinstance(data, dict) else {}
+
+
 def save_data(data: dict[str, list[dict[str, Any]]]) -> None:
     storage = get_storage_status()
     if storage["read_only"]:

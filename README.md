@@ -69,3 +69,10 @@ Vercel serverless functions do not provide durable filesystem writes. This app n
 2. Go to `Storage`.
 3. Create or connect a `KV` database.
 4. Redeploy the project so `KV_REST_API_URL` and `KV_REST_API_TOKEN` are available at runtime.
+
+On first boot with KV attached, the app will seed the database from `data/observations.json`. If that file is empty or missing, it falls back to the built-in sample data.
+
+### Runtime configuration
+
+- `FLASK_SECRET_KEY`
+  Optional Flask secret for production sessions and flash messages.

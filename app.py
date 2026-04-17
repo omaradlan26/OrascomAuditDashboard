@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections import Counter
 from datetime import date, datetime
+import os
 from pathlib import Path
 import re
 
@@ -12,6 +13,7 @@ from utils.data_handler import (
     get_next_id,
     get_storage_status,
     load_data,
+    load_seed_data,
     renumber_observations,
     save_data,
 )
@@ -27,7 +29,7 @@ RATINGS = ["High", "Medium", "Low"]
 
 def create_app() -> Flask:
     app = Flask(__name__)
-    app.config["SECRET_KEY"] = "orascom-audit-dashboard"
+    app.config["SECRET_KEY"] = getenv_str("FLASK_SECRET_KEY", "orascom-audit-dashboard")
 
     @app.get("/health")
     def healthcheck() -> tuple[dict[str, str], int]:
@@ -274,10 +276,13 @@ def load_or_seed_data() -> dict[str, list[dict[str, str | int]]]:
     if data:
         return data
     if storage["read_only"]:
-        return build_default_data()
-    default_data = build_default_data()
-    save_data(default_data)
-    return default_data
+        seed_data = load_seed_data()
+        return seed_data or build_default_data()
+
+    seed_data = load_seed_data()
+    initial_data = seed_data or build_default_data()
+    save_data(initial_data)
+    return initial_data
 
 
 def build_default_data() -> dict[str, list[dict[str, str | int]]]:
@@ -349,6 +354,11 @@ def rating_color(value: str) -> str:
         "Low": "#17A2B8",
     }
     return colors.get(value, "#6C757D")
+
+
+def getenv_str(name: str, default: str) -> str:
+    value = os.getenv(name)
+    return value if value else default
 
 
 app = create_app()
